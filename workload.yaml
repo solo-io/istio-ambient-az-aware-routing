@@ -1,0 +1,141 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+  labels:
+    istio.io/dataplane-mode: ambient
+---
+# httpbin with 3 replicas, one per zone via nodeSelector in separate deployments
+# Using separate deployments so we can independently scale per-zone for failover testing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: httpbin-zone-a
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: httpbin
+      zone: us-east-1a
+  template:
+    metadata:
+      labels:
+        app: httpbin
+        zone: us-east-1a
+    spec:
+      nodeSelector:
+        topology.kubernetes.io/zone: us-east-1a
+      containers:
+        - name: httpbin
+          image: kennethreitz/httpbin
+          ports:
+            - containerPort: 80
+          env:
+            - name: POD_ZONE
+              value: us-east-1a
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: httpbin-zone-b
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: httpbin
+      zone: us-east-1b
+  template:
+    metadata:
+      labels:
+        app: httpbin
+        zone: us-east-1b
+    spec:
+      nodeSelector:
+        topology.kubernetes.io/zone: us-east-1b
+      containers:
+        - name: httpbin
+          image: kennethreitz/httpbin
+          ports:
+            - containerPort: 80
+          env:
+            - name: POD_ZONE
+              value: us-east-1b
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: httpbin-zone-c
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: httpbin
+      zone: us-east-1c
+  template:
+    metadata:
+      labels:
+        app: httpbin
+        zone: us-east-1c
+    spec:
+      nodeSelector:
+        topology.kubernetes.io/zone: us-east-1c
+      containers:
+        - name: httpbin
+          image: kennethreitz/httpbin
+          ports:
+            - containerPort: 80
+          env:
+            - name: POD_ZONE
+              value: us-east-1c
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: httpbin
+  namespace: demo
+spec:
+  trafficDistribution: PreferClose
+  selector:
+    app: httpbin
+  ports:
+    - port: 80
+      targetPort: 80
+---
+# Client pinned to zone-a (same-az-test-worker)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: curl-client
+  namespace: demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: curl-client
+  template:
+    metadata:
+      labels:
+        app: curl-client
+    spec:
+      nodeSelector:
+        topology.kubernetes.io/zone: us-east-1a
+      containers:
+        - name: curl
+          image: curlimages/curl:latest
+          command: ["sleep", "infinity"]
